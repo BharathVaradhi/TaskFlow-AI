@@ -83,25 +83,30 @@ Alternatively, you can register a new account and start managing your own projec
 - Groq API
 
 
-# 📂 Project Structure
+## 📂 Project Structure
 
-
-TaskFlow-AI/
+```text
+TaskFlow-AI
 │
-├── client/
-│   ├── src/
-│   ├── components/
-│   ├── pages/
+├── client
+│   ├── src
+│   ├── components
+│   ├── pages
+│   ├── services
 │   └── ...
 │
-├── server/
-│   ├── src/
-│   ├── models.js
-│   ├── routes.js
-│   ├── server.js
-│   └── ...
+├── server
+│   ├── src
+│   │   ├── server.js
+│   │   ├── routes.js
+│   │   ├── models.js
+│   │   └── seed.js
+│   ├── package.json
+│   └── .env
 │
+├── package.json
 └── README.md
+```
 
 # ⚙️ Installation
 
