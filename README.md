@@ -90,24 +90,44 @@ TaskFlow-AI
 │
 ├── client
 │   ├── src
-│   ├── components
-│   ├── pages
-│   ├── services
-│   └── ...
+│   │   ├── components
+│   │   │   ├── Login.jsx
+│   │   │   ├── Register.jsx
+│   │   │   ├── ProjectDetails.jsx
+│   │   │   ├── ProtectedRoute.jsx
+│   │   │   └── QuickModal.jsx
+│   │   │
+│   │   ├── services
+│   │   │   ├── aiService.js
+│   │   │   ├── api.js
+│   │   │   ├── authService.js
+│   │   │   ├── projectService.js
+│   │   │   └── taskService.js
+│   │   │
+│   │   ├── App.jsx
+│   │   ├── data.js
+│   │   ├── main.jsx
+│   │   └── styles.css
+│   │
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.js
+│   └── vercel.json
 │
 ├── server
 │   ├── src
-│   │   ├── server.js
-│   │   ├── routes.js
 │   │   ├── models.js
-│   │   └── seed.js
+│   │   ├── routes.js
+│   │   ├── seed.js
+│   │   └── server.js
+│   │
+│   ├── .env.example
 │   ├── package.json
-│   └── .env
+│   └── .gitignore
 │
 ├── package.json
 └── README.md
 ```
-
 # ⚙️ Installation
 
 Clone the repository
