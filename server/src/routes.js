@@ -39,15 +39,30 @@ router.post("/auth/login", async (req, res, next) => {
 });
 router.get("/auth/me", auth, (req, res) => res.json(req.user));
 
+const updateProjectProgress = async (projectId) => {
+  if (!projectId) return;
+  const total = await Task.countDocuments({ project: projectId });
+  if (total === 0) {
+    await Project.findByIdAndUpdate(projectId, { progress: 0 });
+    return;
+  }
+  const completed = await Task.countDocuments({ project: projectId, status: "Completed" });
+  const progress = Math.round((completed / total) * 100);
+  await Project.findByIdAndUpdate(projectId, { progress });
+};
+
 router.route("/projects").get(auth, async (req, res, next) => {
   try { res.json(await Project.find({ $or: [{ owner: req.user.id }, { members: req.user.id }] }).populate("members", "name email avatar")); } catch (e) { next(e); }
 }).post(auth, async (req, res, next) => {
   try { res.status(201).json(await Project.create({ ...req.body, owner: req.user.id })); } catch (e) { next(e); }
 });
 router.route("/projects/:id").get(auth, async (req, res, next) => {
-  try { res.json(await Project.findById(req.params.id).populate("members", "name email role avatar")); } catch (e) { next(e); }
+  try { res.json(await Project.findById(req.params.id).populate("members", "name email role avatar department")); } catch (e) { next(e); }
 }).patch(auth, async (req, res, next) => {
-  try { res.json(await Project.findOneAndUpdate({ _id: req.params.id, owner: req.user.id }, req.body, { new: true, runValidators: true })); } catch (e) { next(e); }
+  try {
+    const updated = await Project.findOneAndUpdate({ _id: req.params.id, owner: req.user.id }, req.body, { new: true, runValidators: true }).populate("members", "name email role avatar department");
+    res.json(updated);
+  } catch (e) { next(e); }
 }).delete(auth, async (req, res, next) => {
   try { await Project.findOneAndDelete({ _id: req.params.id, owner: req.user.id }); res.status(204).end(); } catch (e) { next(e); }
 });
@@ -58,12 +73,29 @@ router.route("/tasks").get(auth, async (req, res, next) => {
     res.json(await Task.find(query).populate("assignee", "name avatar").populate("project", "name"));
   } catch (e) { next(e); }
 }).post(auth, async (req, res, next) => {
-  try { res.status(201).json(await Task.create({ ...req.body, createdBy: req.user.id })); } catch (e) { next(e); }
+  try {
+    const task = await Task.create({ ...req.body, createdBy: req.user.id });
+    await updateProjectProgress(task.project);
+    res.status(201).json(task);
+  } catch (e) { next(e); }
 });
 router.route("/tasks/:id").patch(auth, async (req, res, next) => {
-  try { res.json(await Task.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true })); } catch (e) { next(e); }
+  try {
+    const task = await Task.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+    if (task) {
+      await updateProjectProgress(task.project);
+    }
+    res.json(task);
+  } catch (e) { next(e); }
 }).delete(auth, async (req, res, next) => {
-  try { await Task.findByIdAndDelete(req.params.id); res.status(204).end(); } catch (e) { next(e); }
+  try {
+    const task = await Task.findById(req.params.id);
+    await Task.findByIdAndDelete(req.params.id);
+    if (task) {
+      await updateProjectProgress(task.project);
+    }
+    res.status(204).end();
+  } catch (e) { next(e); }
 });
 
 router.get("/dashboard", auth, async (req, res, next) => {
@@ -237,6 +269,101 @@ router.get("/users", auth, async (req, res, next) => {
     }));
     res.json(populatedUsers);
   } catch (e) { next(e); }
+});
+
+// Bulk Task Insertion
+router.post("/tasks/bulk", auth, async (req, res, next) => {
+  try {
+    const { tasks, projectId } = req.body;
+    if (!projectId) return res.status(400).json({ message: "projectId is required" });
+    if (!Array.isArray(tasks) || tasks.length === 0) return res.status(400).json({ message: "tasks array is required" });
+    
+    const tasksToCreate = tasks.map(t => ({
+      title: t.title,
+      description: t.description || "",
+      priority: t.priority || "Medium",
+      dueDate: t.dueDate || null,
+      status: t.status || "Todo",
+      assignee: t.assignee || null,
+      project: projectId,
+      createdBy: req.user.id
+    }));
+
+    const createdTasks = await Task.insertMany(tasksToCreate);
+    await updateProjectProgress(projectId);
+    
+    // Return populated tasks
+    const populated = await Task.find({ _id: { $in: createdTasks.map(t => t._id) } })
+      .populate("assignee", "name avatar")
+      .populate("project", "name");
+      
+    res.status(201).json(populated);
+  } catch (e) { next(e); }
+});
+
+// Case-Insensitive Multi-Entity Search
+router.get("/search", auth, async (req, res, next) => {
+  try {
+    const { q } = req.query;
+    if (!q) return res.json({ projects: [], tasks: [] });
+    const regex = new RegExp(q, "i");
+    
+    const projects = await Project.find({
+      name: regex,
+      $or: [{ owner: req.user.id }, { members: req.user.id }]
+    }).limit(5).populate("members", "name email avatar");
+    
+    const tasks = await Task.find({
+      title: regex,
+      $or: [{ createdBy: req.user.id }, { assignee: req.user.id }]
+    }).limit(5).populate("assignee", "name avatar").populate("project", "name");
+    
+    res.json({ projects, tasks });
+  } catch (e) { next(e); }
+});
+
+// Dynamic AI Executive Summary using Groq
+router.get("/ai/summary", auth, async (req, res, next) => {
+  try {
+    if (!process.env.GROQ_API_KEY) {
+      return res.status(503).json({ message: "GROQ API key is not configured" });
+    }
+    
+    const userProjects = await Project.find({
+      $or: [{ owner: req.user.id }, { members: req.user.id }]
+    });
+
+    const projectIds = userProjects.map(p => p._id);
+    const userTasks = await Task.find({ project: { $in: projectIds } });
+
+    const totalProjects = userProjects.length;
+    const completedTasks = userTasks.filter(t => t.status === "Completed").length;
+    const pendingTasks = userTasks.length - completedTasks;
+    const delayedProjects = userProjects.filter(p => ["Delayed", "On Hold"].includes(p.status)).length;
+
+    const summaryPrompt = `Write a professional, concise executive summary (maximum 3 sentences) for a project manager reviewing their team workspace.
+    Stats:
+    - Active projects: ${totalProjects}
+    - Tasks completed: ${completedTasks}
+    - Tasks pending: ${pendingTasks}
+    - Projects delayed/on-hold: ${delayedProjects}
+    Include a brief positive insight or recommendation based on these numbers. Do not include introductory filler.`;
+
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        { role: "user", content: summaryPrompt }
+      ],
+      temperature: 0.5,
+      max_tokens: 150
+    });
+
+    const summaryText = completion.choices[0].message.content.trim();
+    res.json({ summary: summaryText });
+  } catch (e) {
+    console.error("AI Summary generation error:", e);
+    res.json({ summary: "AI summary generation is currently offline. Please verify Groq credentials." });
+  }
 });
 
 export default router;

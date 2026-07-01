@@ -8,7 +8,10 @@ import api from "./routes.js";
 
 const app = express();
 app.use(helmet());
-app.use(cors({ origin: process.env.CLIENT_URL || "http://localhost:5173", credentials: true }));
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
 app.use(express.json({ limit: "2mb" }));
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 app.get("/api/health", (_, res) => res.json({ status: "ok", service: "TaskFlow AI API" }));

@@ -17,6 +17,7 @@ import Login from "./components/Login";
 import Register from "./components/Register";
 import ProtectedRoute from "./components/ProtectedRoute";
 import ProjectDetails from "./components/ProjectDetails";
+import QuickModal from "./components/QuickModal";
 
 // Services
 import authService from "./services/authService";
@@ -37,8 +38,13 @@ const nav = [
 function App() {
   const [user, setUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState(() => localStorage.getItem("darkMode") === "true");
   const [sidebar, setSidebar] = useState(false);
+  const [users, setUsers] = useState([]);
+
+  useEffect(() => {
+    localStorage.setItem("darkMode", dark);
+  }, [dark]);
 
   useEffect(() => {
     const init = async () => {
@@ -56,6 +62,20 @@ function App() {
     };
     init();
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      const fetchUsers = async () => {
+        try {
+          const response = await API.get("/users");
+          setUsers(response.data);
+        } catch (e) {
+          console.error("Error loading team members", e);
+        }
+      };
+      fetchUsers();
+    }
+  }, [user]);
 
   const handleLogout = () => {
     authService.logout();
@@ -86,6 +106,7 @@ function App() {
               setDark={setDark}
               sidebar={sidebar}
               setSidebar={setSidebar}
+              users={users}
             />
           </ProtectedRoute>
         }
@@ -94,7 +115,7 @@ function App() {
   );
 }
 
-function MainLayout({ user, logout, dark, setDark, sidebar, setSidebar }) {
+function MainLayout({ user, logout, dark, setDark, sidebar, setSidebar, users }) {
   return (
     <div className={dark ? "app dark" : "app"}>
       <Sidebar user={user} logout={logout} open={sidebar} close={() => setSidebar(false)} />
@@ -103,10 +124,10 @@ function MainLayout({ user, logout, dark, setDark, sidebar, setSidebar }) {
         <div className="content">
           <Routes>
             <Route path="/" element={<Dashboard user={user} />} />
-            <Route path="/projects" element={<Projects />} />
-            <Route path="/projects/:id" element={<ProjectDetails />} />
-            <Route path="/tasks" element={<Tasks />} />
-            <Route path="/ai" element={<AIWorkspace />} />
+            <Route path="/projects" element={<Projects users={users} currentUser={user} />} />
+            <Route path="/projects/:id" element={<ProjectDetails users={users} currentUser={user} />} />
+            <Route path="/tasks" element={<Tasks users={users} currentUser={user} />} />
+            <Route path="/ai" element={<AIWorkspace users={users} />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/team" element={<Team />} />
             <Route path="/settings" element={<SettingsPage dark={dark} setDark={setDark} user={user} />} />
@@ -191,20 +212,119 @@ function Sidebar({ user, logout, open, close }) {
 }
 
 function Header({ user, dark, setDark, menu }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState({ projects: [], tasks: [] });
+  const [showResults, setShowResults] = useState(false);
+  const searchInputRef = useMemo(() => ({ current: null }), []);
+  const navigate = useNavigate();
+
   const getInitials = (name) => {
     if (!name) return "";
     return name.split(" ").map(n => n[0]).join("");
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [searchInputRef]);
+
+  useEffect(() => {
+    if (!query.trim()) {
+      setResults({ projects: [], tasks: [] });
+      return;
+    }
+
+    const delayDebounce = setTimeout(async () => {
+      try {
+        const response = await API.get(`/search?q=${encodeURIComponent(query)}`);
+        setResults(response.data);
+      } catch (err) {
+        console.error("Search error", err);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounce);
+  }, [query]);
+
   return (
-    <header className="header">
+    <header className="header" style={{ position: "relative" }}>
       <button className="menu icon-btn" onClick={menu}><Menu size={20}/></button>
       <div className="header-title">
         <span>Orbit Studio</span>
         <h1>Command Center</h1>
       </div>
       <div className="header-actions">
-        <label className="global-search"><Search size={17}/><input placeholder="Search workspace"/><kbd>⌘ K</kbd></label>
+        <div style={{ position: "relative" }}>
+          <label className="global-search">
+            <Search size={17}/>
+            <input 
+              ref={(el) => { searchInputRef.current = el; }}
+              placeholder="Search workspace" 
+              value={query}
+              onChange={(e) => { setQuery(e.target.value); setShowResults(true); }}
+              onFocus={() => setShowResults(true)}
+              onBlur={() => setTimeout(() => setShowResults(false), 200)}
+            />
+            <kbd>⌘ K</kbd>
+          </label>
+          
+          {showResults && query.trim() && (
+            <div className="card search-results-dropdown" style={{ 
+              position: "absolute", 
+              top: "100%", 
+              left: 0, 
+              right: 0, 
+              marginTop: "8px", 
+              zIndex: 999, 
+              background: "var(--surface-1)", 
+              border: "1px solid var(--line)", 
+              borderRadius: "8px", 
+              maxHeight: "300px", 
+              overflowY: "auto",
+              boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
+              padding: "12px"
+            }}>
+              <style>{`
+                .search-result-item:hover {
+                  background: var(--surface-2);
+                }
+              `}</style>
+              {results.projects.length === 0 && results.tasks.length === 0 ? (
+                <div style={{ padding: "8px", color: "var(--muted)", fontSize: "13px" }}>No results found</div>
+              ) : (
+                <>
+                  {results.projects.length > 0 && (
+                    <div style={{ marginBottom: "12px" }}>
+                      <div style={{ fontSize: "11px", fontWeight: 600, textTransform: "uppercase", color: "var(--muted)", marginBottom: "4px" }}>Projects</div>
+                      {results.projects.map(p => (
+                        <div key={p._id} style={{ padding: "6px 8px", cursor: "pointer", borderRadius: "4px", fontSize: "13px" }} className="search-result-item" onClick={() => navigate(`/projects/${p._id}`)}>
+                          <strong>{p.name}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {results.tasks.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: "11px", fontWeight: 600, textTransform: "uppercase", color: "var(--muted)", marginBottom: "4px" }}>Tasks</div>
+                      {results.tasks.map(t => (
+                        <div key={t._id} style={{ padding: "6px 8px", cursor: "pointer", borderRadius: "4px", fontSize: "13px" }} className="search-result-item" onClick={() => navigate(`/projects/${t.project?._id || ""}`)}>
+                          <strong>{t.title}</strong>
+                          <span style={{ fontSize: "11px", color: "var(--muted)", marginLeft: "8px" }}>in {t.project?.name || "Independent"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
         <button className="icon-btn" onClick={() => setDark(!dark)}>{dark ? <Sun size={19}/> : <Moon size={19}/>}</button>
         <button className="icon-btn notification"><Bell size={19}/><span/></button>
         <span className="avatar coral">{getInitials(user?.name)}</span>
@@ -465,7 +585,7 @@ const Insight = ({ color, icon: Icon, title, text }) => (
   </div>
 );
 
-function Projects() {
+function Projects({ users, currentUser }) {
   const [projects, setProjects] = useState([]);
   const [filter, setFilter] = useState("All");
   const [query, setQuery] = useState("");
@@ -600,6 +720,8 @@ function Projects() {
       {modalOpen && (
         <QuickModal 
           type="project" 
+          users={users}
+          currentUser={currentUser}
           close={() => setModalOpen(false)} 
           onSubmit={handleCreateProject}
         />
@@ -608,7 +730,7 @@ function Projects() {
   );
 }
 
-function Tasks() {
+function Tasks({ users, currentUser }) {
   const cols = ["Todo", "In Progress", "Review", "Completed"];
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -776,7 +898,9 @@ function Tasks() {
                         <p>{t.project?.name || "Independent Task"}</p>
                         <div className="task-footer">
                           <span className={t.dueDate ? "" : ""}><Clock3 size={14}/> {t.dueDate ? new Date(t.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "Today"}</span>
-                          <span className="avatar tiny">{t.assignee?.name ? t.assignee.name.split(" ").map(n=>n[0]).join("") : "BK"}</span>
+                          <span className="avatar tiny" style={{ background: t.assignee ? "var(--accent)" : "#94a0b8" }}>
+                            {t.assignee?.name ? t.assignee.name.split(" ").map(n=>n[0]).join("") : "—"}
+                          </span>
                         </div>
                         {col !== "Completed" && (
                           <button className="advance" onClick={() => advance(t)}>
@@ -802,6 +926,8 @@ function Tasks() {
         <QuickModal 
           type="task" 
           projects={projects}
+          users={users}
+          currentUser={currentUser}
           close={() => setModalOpen(false)} 
           onSubmit={handleCreateTask}
         />
@@ -810,7 +936,7 @@ function Tasks() {
   );
 }
 
-function AIWorkspace() {
+function AIWorkspace({ users }) {
   const [tool, setTool] = useState("Project planner");
   const [prompt, setPrompt] = useState("Build an e-commerce website in 8 weeks");
   const [loading, setLoading] = useState(false);
@@ -826,7 +952,7 @@ function AIWorkspace() {
       setResult(plan);
     } catch (err) {
       console.error(err);
-      alert("AI planning model generation failed. Ensure GEMINI_API_KEY is configured.");
+      alert("AI planning model generation failed. Ensure GROQ_API_KEY is configured.");
     } finally {
       setLoading(false);
     }
@@ -844,17 +970,15 @@ function AIWorkspace() {
         priority: "Medium"
       });
 
-      // 2. Iterate phases and save as tasks linked to project
+      // 2. Bulk create tasks on backend
       if (result.phases && result.phases.length > 0) {
-        for (const phase of result.phases) {
-          await taskService.create({
-            title: phase[0],
-            description: `${phase[1]}: ${phase[2]}`,
-            project: createdProject._id,
-            priority: "Medium",
-            status: "Todo"
-          });
-        }
+        const tasksToImport = result.phases.map(phase => ({
+          title: phase[0],
+          description: `${phase[1]}: ${phase[2]}`,
+          priority: "Medium",
+          status: "Todo"
+        }));
+        await API.post("/tasks/bulk", { tasks: tasksToImport, projectId: createdProject._id });
       }
 
       alert(`AI Plan successfully imported! Created project "${createdProject.name}" with ${result.phases?.length || 0} subtasks.`);
@@ -961,19 +1085,24 @@ function AIWorkspace() {
 function Reports() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [aiSummary, setAiSummary] = useState("Loading AI executive summary...");
 
   useEffect(() => {
-    const fetchStats = async () => {
+    const fetchStatsAndSummary = async () => {
       try {
         const response = await API.get("/dashboard");
         setData(response.data);
+        
+        const summaryRes = await API.get("/ai/summary");
+        setAiSummary(summaryRes.data.summary);
       } catch (err) {
         console.error(err);
+        setAiSummary("AI executive summary generation is offline. Ensure GROQ_API_KEY is configured.");
       } finally {
         setLoading(false);
       }
     };
-    fetchStats();
+    fetchStatsAndSummary();
   }, []);
 
   if (loading) {
@@ -1055,16 +1184,15 @@ function Reports() {
         </section>
         
         <section className="card report-summary">
-          <CardHead title="AI Executive Summary" sub="Workspace activity summary"/>
-          <p>
-            Delivery pulse calculations show <b>{metrics.healthScore}%</b> overall health. 
-            A total of <b>{metrics.completedTasks}</b> tasks have been marked completed. 
-            Schedule alerts pinpoint {metrics.delayedProjects} project scopes on watchlist.
+          <CardHead title="AI Executive Summary" sub="Dynamic project intelligence summary"/>
+          <p style={{ fontStyle: "italic", lineHeight: "1.6", color: "var(--text)" }}>
+            "{aiSummary}"
           </p>
-          <h4>Seeded Team Status</h4>
-          <p className="checkline"><Check size={16}/>Alex Morgan (Project Manager) has overall owner access.</p>
-          <p className="checkline"><Check size={16}/>Sara Kim (Frontend Engineer) is allocated to Mobile redesign.</p>
-          <p className="checkline"><Check size={16}/>Taylor Diaz (Backend Engineer) is managing data integrations.</p>
+          <hr style={{ margin: "16px 0", border: 0, borderTop: "1px solid var(--line)" }} />
+          <h4>Portfolio Statistics</h4>
+          <p className="checkline"><Check size={16}/>Delivery rate is calculated at {metrics.healthScore}% overall health.</p>
+          <p className="checkline"><Check size={16}/>A total of {metrics.completedTasks} tasks have been completed.</p>
+          <p className="checkline"><Check size={16}/>{metrics.delayedProjects} projects are flagged as delayed/on-hold.</p>
         </section>
       </div>
     </>
@@ -1197,90 +1325,5 @@ const SettingRow = ({ title, text, value, change }) => (
     </button>
   </div>
 );
-
-function QuickModal({ type, projects, close, onSubmit }) {
-  const submit = e => {
-    e.preventDefault();
-    const f = new FormData(e.currentTarget);
-    
-    if (type === "task") {
-      onSubmit({
-        title: f.get("title"),
-        description: f.get("description"),
-        project: f.get("project"), // Real project object ID selected
-        priority: f.get("priority") || "Medium",
-        status: "Todo"
-      });
-    } else {
-      // project
-      onSubmit({
-        name: f.get("title"),
-        description: f.get("description"),
-        priority: f.get("priority") || "Medium",
-        status: "Planning"
-      });
-    }
-  };
-
-  return (
-    <div className="modal-wrap">
-      <div className="scrim" onClick={close}/>
-      <motion.form 
-        className="modal card" 
-        onSubmit={submit} 
-        initial={{ opacity: 0, scale: .96, y: 10 }} 
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-      >
-        <div className="modal-head">
-          <div>
-            <h2>Create {type}</h2>
-            <p>Add details to register on database.</p>
-          </div>
-          <button type="button" className="icon-btn" onClick={close}><X size={18}/></button>
-        </div>
-
-        <label>
-          {type === "task" ? "Task title" : "Project name"}
-          <input name="title" required placeholder={type === "task" ? "e.g. Design onboarding flow" : "e.g. Website redesign"}/>
-        </label>
-        
-        <label>
-          Description
-          <textarea name="description" placeholder="What needs to be accomplished?"/>
-        </label>
-
-        {type === "task" && (
-          <label>
-            Project
-            <select name="project" required style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--surface-2)", color: "var(--text)" }}>
-              {projects && projects.length > 0 ? (
-                projects.map(p => (
-                  <option key={p._id} value={p._id}>{p.name}</option>
-                ))
-              ) : (
-                <option value="">No projects created yet</option>
-              )}
-            </select>
-          </label>
-        )}
-
-        <label>
-          Priority
-          <select name="priority" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--surface-2)", color: "var(--text)" }}>
-            <option value="Low">Low</option>
-            <option value="Medium" defaultValue>Medium</option>
-            <option value="High">High</option>
-            <option value="Critical">Critical</option>
-          </select>
-        </label>
-
-        <div className="modal-actions">
-          <button type="button" className="secondary" onClick={close}>Cancel</button>
-          <button className="primary">Create {type}</button>
-        </div>
-      </motion.form>
-    </div>
-  );
-}
 
 export default App;

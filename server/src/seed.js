@@ -40,21 +40,17 @@ async function seed() {
   await mongoose.connect(process.env.MONGODB_URI);
   console.log("Connected successfully.");
 
-  // Clear existing databases
-  console.log("Clearing existing users, projects, and tasks...");
-  await User.deleteMany({});
-  await Project.deleteMany({});
-  await Task.deleteMany({});
+  
 
   // Seed Users
   console.log("Seeding users...");
-  const hashedUserPassword = await bcrypt.hash("password123", 12);
+
   const createdUsers = [];
   for (const u of USERS_DATA) {
     const user = await User.create({
       name: u.name,
       email: u.email,
-      password: hashedUserPassword,
+      password: "password123",
       role: u.role,
       avatar: u.initials,
       department: u.department

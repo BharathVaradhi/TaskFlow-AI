@@ -8,8 +8,9 @@ import {
 import projectService from "../services/projectService";
 import taskService from "../services/taskService";
 import aiService from "../services/aiService";
+import QuickModal from "./QuickModal";
 
-export default function ProjectDetails() {
+export default function ProjectDetails({ users = [], currentUser }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [project, setProject] = useState(null);
@@ -21,9 +22,9 @@ export default function ProjectDetails() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState(null);
 
-  // New task modal-like state for project details
-  const [newTaskTitle, setNewTaskTitle] = useState("");
-  const [addingTask, setAddingTask] = useState(false);
+  // Modal and assignment states
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedMemberToAdd, setSelectedMemberToAdd] = useState("");
 
   useEffect(() => {
     fetchProjectData();
@@ -52,17 +53,14 @@ export default function ProjectDetails() {
     if (currentIndex < 3) {
       const nextStatus = cols[currentIndex + 1];
       try {
-        const updated = await taskService.update(taskId, { status: nextStatus });
+        await taskService.update(taskId, { status: nextStatus });
         // Update local tasks
-        setTasks(tasks.map(t => t._id === taskId ? { ...t, status: nextStatus } : t));
-        
-        // Recalculate project progress based on completed tasks
         const updatedTasks = tasks.map(t => t._id === taskId ? { ...t, status: nextStatus } : t);
+        setTasks(updatedTasks);
+        
+        // Recalculate project progress based on completed tasks for client-side visual immediate feedback
         const completedCount = updatedTasks.filter(t => t.status === "Completed").length;
         const newProgress = updatedTasks.length ? Math.round((completedCount / updatedTasks.length) * 100) : 0;
-        
-        // Update on database
-        await projectService.update(id, { progress: newProgress });
         setProject(prev => ({ ...prev, progress: newProgress }));
       } catch (err) {
         console.error("Failed to update task status:", err);
@@ -70,30 +68,24 @@ export default function ProjectDetails() {
     }
   };
 
-  const handleAddTask = async (e) => {
-    e.preventDefault();
-    if (!newTaskTitle.trim()) return;
-
+  const handleCreateTaskFromModal = async (taskData) => {
     try {
-      const newTask = await taskService.create({
-        title: newTaskTitle,
-        project: id,
-        priority: "Medium",
-        status: "Todo"
+      const created = await taskService.create({
+        ...taskData,
+        project: id
       });
+      // Refresh tasks
+      const refreshedTasks = [...tasks, created];
+      setTasks(refreshedTasks);
       
-      const newTasks = [...tasks, newTask];
-      setTasks(newTasks);
-      setNewTaskTitle("");
-      setAddingTask(false);
-
-      // Update project progress
-      const completedCount = newTasks.filter(t => t.status === "Completed").length;
-      const newProgress = Math.round((completedCount / newTasks.length) * 100);
-      await projectService.update(id, { progress: newProgress });
+      // Recalculate progress for local state update
+      const completedCount = refreshedTasks.filter(t => t.status === "Completed").length;
+      const newProgress = refreshedTasks.length ? Math.round((completedCount / refreshedTasks.length) * 100) : 0;
       setProject(prev => ({ ...prev, progress: newProgress }));
+      
+      setModalOpen(false);
     } catch (err) {
-      console.error("Failed to add task:", err);
+      console.error("Failed to create task", err);
     }
   };
 
@@ -169,31 +161,10 @@ export default function ProjectDetails() {
           <section className="card project-tasks-card">
             <div className="card-head">
               <h3>Project Tasks ({tasks.length})</h3>
-              <button className="primary" onClick={() => setAddingTask(true)}>
+              <button className="primary" onClick={() => setModalOpen(true)}>
                 <Plus size={15} /> Add Task
               </button>
             </div>
-
-            {addingTask && (
-              <form onSubmit={handleAddTask} className="add-task-form">
-                <input
-                  type="text"
-                  required
-                  value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
-                  placeholder="Task title..."
-                  autoFocus
-                />
-                <div className="add-task-actions">
-                  <button type="button" className="secondary" onClick={() => setAddingTask(false)}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="primary">
-                    Create Task
-                  </button>
-                </div>
-              </form>
-            )}
 
             <div className="details-task-list">
               {tasks.length === 0 ? (
@@ -251,7 +222,7 @@ export default function ProjectDetails() {
             </div>
             
             <p className="ai-box-description">
-              Query Gemini AI to scan the project scope, tasks, and completion metrics for scheduling risks or critical blockers.
+              Query Groq Llama to scan the project scope, tasks, and completion metrics for scheduling risks or critical blockers.
             </p>
 
             {aiResult && (
@@ -329,6 +300,39 @@ export default function ProjectDetails() {
 
           <section className="card project-team-card">
             <h3>Project Team</h3>
+            
+            {project.owner === currentUser?._id && users.filter(u => !project.members?.some(m => m._id === u._id) && u._id !== project.owner).length > 0 && (
+              <div style={{ display: "flex", gap: "8px", marginBottom: "16px", marginTop: "8px" }}>
+                <select 
+                  value={selectedMemberToAdd} 
+                  onChange={(e) => setSelectedMemberToAdd(e.target.value)}
+                  style={{ flexGrow: 1, padding: "6px", borderRadius: "6px", border: "1px solid var(--line)", background: "var(--surface-2)", color: "var(--text)", fontSize: "12px" }}
+                >
+                  <option value="">Add member...</option>
+                  {users.filter(u => !project.members?.some(m => m._id === u._id) && u._id !== project.owner).map(u => (
+                    <option key={u._id} value={u._id}>{u.name}</option>
+                  ))}
+                </select>
+                <button 
+                  className="primary" 
+                  onClick={async () => {
+                    if (!selectedMemberToAdd) return;
+                    try {
+                      const updatedMemberIds = [...(project.members?.map(m => m._id) || []), selectedMemberToAdd];
+                      const updatedProj = await projectService.update(id, { members: updatedMemberIds });
+                      setProject(updatedProj);
+                      setSelectedMemberToAdd("");
+                    } catch (err) {
+                      console.error("Failed to add member", err);
+                    }
+                  }}
+                  style={{ padding: "6px 12px", fontSize: "12px", borderRadius: "6px" }}
+                >
+                  Add
+                </button>
+              </div>
+            )}
+
             <div className="details-team-list">
               {project.members && project.members.length > 0 ? (
                 project.members.map((m) => (
@@ -347,6 +351,17 @@ export default function ProjectDetails() {
           </section>
         </div>
       </div>
+
+      {modalOpen && (
+        <QuickModal
+          type="task"
+          projects={[project]}
+          users={users}
+          currentUser={currentUser}
+          close={() => setModalOpen(false)}
+          onSubmit={handleCreateTaskFromModal}
+        />
+      )}
     </div>
   );
 }
