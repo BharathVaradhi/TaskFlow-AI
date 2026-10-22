@@ -7,10 +7,7 @@ const router = Router();
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
-console.log(
-  "Groq Key Loaded:",
-  process.env.GROQ_API_KEY?.slice(0, 10)
-);
+
 const sign = (id) => jwt.sign({ id }, process.env.JWT_SECRET || "development-only-secret", { expiresIn: process.env.JWT_EXPIRES_IN || "7d" });
 const auth = async (req, res, next) => {
   try {
