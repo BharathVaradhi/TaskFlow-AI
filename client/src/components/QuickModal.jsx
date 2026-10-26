@@ -13,6 +13,7 @@ export default function QuickModal({ type, projects, users = [], currentUser, cl
         project: f.get("project"),
         assignee: f.get("assignee") || null,
         priority: f.get("priority") || "Medium",
+        dueDate: f.get("dueDate") || null,
         status: "Todo"
       });
     } else {
@@ -26,6 +27,8 @@ export default function QuickModal({ type, projects, users = [], currentUser, cl
         description: f.get("description"),
         priority: f.get("priority") || "Medium",
         status: "Planning",
+        startDate: f.get("startDate") || null,
+        endDate: f.get("endDate") || null,
         members: selectedMembers
       });
     }
@@ -57,6 +60,14 @@ export default function QuickModal({ type, projects, users = [], currentUser, cl
           Description
           <textarea name="description" placeholder="What needs to be accomplished?"/>
         </label>
+
+        {type === "task" && <label>Due date<input type="date" name="dueDate" /></label>}
+        {type === "project" && (
+          <div className="form-grid">
+            <label>Start date<input type="date" name="startDate" /></label>
+            <label>Due date<input type="date" name="endDate" /></label>
+          </div>
+        )}
 
         {type === "task" && (
           <label>

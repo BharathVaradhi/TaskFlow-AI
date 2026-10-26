@@ -4,11 +4,12 @@ import bcrypt from "bcryptjs";
 import { User, Project, Task } from "./models.js";
 
 const USERS_DATA = [
-  { name: "Alex Morgan", email: "alex@taskflow.ai", role: "Project Manager", initials: "AM", color: "#7c5cff", department: "Product & Operations" },
-  { name: "Sara Kim", email: "sara@taskflow.ai", role: "Team Member", initials: "SK", color: "#ec7a9c", department: "Product & Operations" },
-  { name: "Jordan Reed", email: "jordan@taskflow.ai", role: "Team Member", initials: "JR", color: "#42bfa5", department: "Research & Development" },
-  { name: "Noah Patel", email: "noah@taskflow.ai", role: "Team Member", initials: "NP", color: "#f3a44a", department: "Growth" },
-  { name: "Taylor Diaz", email: "taylor@taskflow.ai", role: "Team Member", initials: "TD", color: "#4f8df7", department: "Engineering" }
+  { name: "Demo User", email: "demo@taskflow.ai", password: "Demo@123", role: "Project Manager", initials: "DU", color: "#3154d9", department: "Executive" },
+  { name: "Alex Morgan", email: "alex@taskflow.ai", password: "password123", role: "Project Manager", initials: "AM", color: "#7c5cff", department: "Product & Operations" },
+  { name: "Sara Kim", email: "sara@taskflow.ai", password: "password123", role: "Team Member", initials: "SK", color: "#ec7a9c", department: "Product & Operations" },
+  { name: "Jordan Reed", email: "jordan@taskflow.ai", password: "password123", role: "Team Member", initials: "JR", color: "#42bfa5", department: "Research & Development" },
+  { name: "Noah Patel", email: "noah@taskflow.ai", password: "password123", role: "Team Member", initials: "NP", color: "#f3a44a", department: "Growth" },
+  { name: "Taylor Diaz", email: "taylor@taskflow.ai", password: "password123", role: "Team Member", initials: "TD", color: "#4f8df7", department: "Engineering" }
 ];
 
 const PROJECTS_DATA = [
@@ -50,7 +51,7 @@ async function seed() {
     const user = await User.create({
       name: u.name,
       email: u.email,
-      password: "password123",
+      password: u.password || "password123",
       role: u.role,
       avatar: u.initials,
       department: u.department

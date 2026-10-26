@@ -883,3 +883,45 @@ label input,label textarea{font-size:13px;padding:11px}
     grid-template-columns: 1fr;
   }
 }
+
+/* Notification badge */
+.notification-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #e35f55;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--surface);
+  line-height: 1;
+}
+
+/* Kanban drag & accessibility states */
+.kanban-col.drag-over {
+  border-color: var(--purple, #7357f4) !important;
+  background: rgba(115, 87, 244, 0.06) !important;
+}
+
+.task-card.dragging {
+  opacity: 0.4;
+  transform: scale(0.98);
+}
+
+.task-detail-modal {
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35) !important;
+  border: 1px solid var(--line) !important;
+}
+
+.task-detail-modal input,
+.task-detail-modal textarea,
+.task-detail-modal select {
+  font-family: inherit;
+}

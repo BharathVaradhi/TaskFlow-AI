@@ -23,6 +23,11 @@ const projectService = {
 
   delete: async (id) => {
     await API.delete(`/projects/${id}`);
+  },
+
+  getActivity: async (id) => {
+    const response = await API.get(`/projects/${id}/activity`);
+    return response.data;
   }
 };
 

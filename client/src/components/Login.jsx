@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { Sparkles, Mail, Lock, AlertCircle, ArrowRight } from "lucide-react";
 import authService from "../services/authService";
 
-export default function Login() {
+export default function Login({ onAuthenticated }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -17,7 +17,8 @@ export default function Login() {
     setLoading(true);
 
     try {
-      await authService.login(email, password);
+      const session = await authService.login(email, password);
+      onAuthenticated?.(session.user);
       navigate("/", { replace: true });
     } catch (err) {
       setError(

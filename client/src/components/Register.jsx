@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { User, Mail, Lock, AlertCircle, ArrowRight } from "lucide-react";
 import authService from "../services/authService";
 
-export default function Register() {
+export default function Register({ onAuthenticated }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -24,7 +24,8 @@ export default function Register() {
     }
 
     try {
-      await authService.register(name, email, password);
+      const session = await authService.register(name, email, password);
+      onAuthenticated?.(session.user);
       navigate("/", { replace: true });
     } catch (err) {
       setError(
