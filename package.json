@@ -7,9 +7,15 @@
     "install:all": "npm install && npm install --prefix client && npm install --prefix server",
     "build": "npm run build --prefix client",
     "start": "npm start --prefix server",
-    "test": "npm test --prefix server"
+    "test": "node tests/run-tests.mjs",
+    "test:unit": "npm test --prefix server",
+    "test:api": "playwright test --project=api",
+    "test:e2e": "playwright test --project=browser",
+    "test:smoke": "playwright test --project=production-smoke",
+    "test:report": "node tests/open-report.mjs"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "concurrently": "^9.1.2"
   }
 }
