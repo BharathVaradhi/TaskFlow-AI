@@ -55,7 +55,8 @@ async function queryGroq(systemPrompt, userPrompt, temperature) {
   });
 
   const model =
-    process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+    process.env.GROQ_MODEL ||  "openai/gpt-oss-120b";
+    console.log("ACTIVE GROQ MODEL:", model);
 
   const completion = await groq.chat.completions.create({
     model,
