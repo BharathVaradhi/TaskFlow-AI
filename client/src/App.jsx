@@ -947,6 +947,37 @@ function AIWorkspace({ users, currentUser }) {
     ["Risk analyzer", Gauge],
     ["Weekly report", BarChart3]
   ];
+  const examplePrompts = {
+  "Project planner": [
+    "Plan an e-commerce website development project in 8 weeks",
+    "Create a roadmap for launching a SaaS application",
+    "Plan an AI-powered student attendance management system"
+  ],
+
+  "Task breakdown": [
+    "Break down user authentication into development tasks",
+    "Create implementation tasks for payment gateway integration",
+    "Break down the development of a responsive admin dashboard"
+  ],
+
+  "Sprint planner": [
+    "Plan a 2-week sprint for authentication and authorization",
+    "Create a sprint for developing REST APIs and unit tests",
+    "Plan a sprint to fix critical bugs before product release"
+  ],
+
+  "Risk analyzer": [
+    "Analyze risks involved in migrating the production database",
+    "Identify security risks in an online payment application",
+    "Evaluate delivery and scalability risks before product launch"
+  ],
+
+  "Weekly report": [
+    "Summarize this week's completed and pending project tasks",
+    "Identify project blockers and overdue tasks from this week",
+    "Generate a stakeholder progress report for this project"
+  ]
+};
 
   return (
     <div className="ai-layout">
@@ -1022,21 +1053,15 @@ function AIWorkspace({ users, currentUser }) {
           </div>
           <div className="suggestions">
             <span>Try:</span>
-            {[
-              "Launch a mobile app in 6 weeks",
-              "Plan a 2-week sprint for authentication system",
-              "Analyze delivery risks for database migration"
-            ].map((x) => (
-              <button
-                onClick={() => {
-                  setPrompt(x);
-                }}
-                key={x}
-              >
-                {x}
-              </button>
-            ))}
-          </div>
+           {(examplePrompts[tool] || []).map((x) => (
+            <button
+              onClick={() => setPrompt(x)}
+              key={x}
+             >
+             {x}
+             </button>
+             ))}
+            </div>
         </section>
 
         {result && (
