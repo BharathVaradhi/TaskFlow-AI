@@ -1,6 +1,6 @@
 
 import Groq from "groq-sdk";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+
 
 /**
  * Safely extract JSON from an AI response.
@@ -37,151 +37,85 @@ function extractJSON(text) {
  * Call Groq.
  */
 
-async function queryGroq(systemPrompt, userPrompt, temperature) {
+
+async function queryGroq(
+  systemPrompt,
+  userPrompt,
+  temperature = 0.3,
+  outputFormat = "text"
+) {
   const apiKey = process.env.GROQ_API_KEY?.trim();
 
-  console.log("Groq configuration:", {
-    keyExists: Boolean(apiKey),
-    keyLength: apiKey?.length,
-    startsWithGsk: apiKey?.startsWith("gsk_"),
-  });
-
   if (!apiKey) {
-    throw new Error("GROQ_API_KEY is missing");
+    throw new Error("GROQ_API_KEY is missing.");
   }
 
-  const groq = new Groq({
-    apiKey,
-  });
+  const groq = new Groq({ apiKey });
+  const model = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
 
-  const model =
-    process.env.GROQ_MODEL ||  "openai/gpt-oss-120b";
-    console.log("ACTIVE GROQ MODEL:", model);
+  console.log("ACTIVE GROQ MODEL:", model);
 
-  
-const completion = await groq.chat.completions.create({
-  model,
-  messages: [
-    { role: "system", content: systemPrompt },
-    { role: "user", content: userPrompt },
-  ],
-  temperature,
-  max_tokens: 1500,
-  response_format: {
-    type: "json_object",
-  },
-});
+  const request = {
+    model,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt }
+    ],
+    temperature,
+    max_completion_tokens: 32768,
+    reasoning_effort: "low",
+    include_reasoning: false
+  };
 
-  const content = completion.choices?.[0]?.message?.content;
+  if (outputFormat === "json") {
+    request.response_format = { type: "json_object" };
+  }
+
+  const completion = await groq.chat.completions.create(request);
+  const choice = completion.choices?.[0];
+
+  console.log("Groq finish reason:", choice?.finish_reason);
+  console.log("Groq usage:", completion.usage);
+
+  const content = choice?.message?.content;
 
   if (!content || !content.trim()) {
     throw new Error("Groq returned an empty response.");
   }
 
-  return content.trim();
-}
-
-
-/**
- * Call Gemini.
- */
-async function queryGemini(systemPrompt, userPrompt, temperature) {
-  const genAI = new GoogleGenerativeAI(
-    process.env.GEMINI_API_KEY.trim()
-  );
-
-  // Override the model through server/.env if needed.
-  const modelName =
-    process.env.GEMINI_MODEL || "gemini-2.5-flash";
-
-  const model = genAI.getGenerativeModel({
-    model: modelName,
-    systemInstruction: systemPrompt,
-    generationConfig: {
-      temperature,
-      maxOutputTokens: 1500,
-    },
-  });
-
-  const result = await model.generateContent(userPrompt);
-  const content = result.response.text();
-
-  if (!content || !content.trim()) {
-    throw new Error("Gemini returned an empty response.");
+  if (choice.finish_reason === "length") {
+    throw new Error("Groq reached its completion token limit.");
   }
 
   return content.trim();
 }
 
 /**
- * Central AI provider with fallback.
- * Tries Groq first, then Gemini if configured.
+ * Groq is the only AI provider.
  */
 export async function queryLLM(
   systemPrompt,
   userPrompt,
-  temperature = 0.3
+  temperature = 0.3,
+  outputFormat = "text"
 ) {
-  const hasGroq = Boolean(process.env.GROQ_API_KEY?.trim());
-  const hasGemini = Boolean(process.env.GEMINI_API_KEY?.trim());
-
-  if (!hasGroq && !hasGemini) {
-    const error = new Error(
-      "No AI provider configured. Set GROQ_API_KEY or GEMINI_API_KEY in server/.env."
+  try {
+    return await queryGroq(
+      systemPrompt,
+      userPrompt,
+      temperature,
+      outputFormat
     );
-    error.status = 503;
+  } catch (error) {
+    console.error("Groq request failed:", {
+      status: error.status,
+      code: error.code,
+      message: error.message
+    });
+
+    error.status = error.status || 502;
     throw error;
   }
-
-  let groqError = null;
-
-  if (hasGroq) {
-    try {
-      return await queryGroq(
-        systemPrompt,
-        userPrompt,
-        temperature
-      );
-    } catch (error) {
-      groqError = error;
-      console.error("Groq request failed:", {
-        status: error.status,
-        code: error.code,
-        message: error.message,
-      });
-    }
-  }
-
-  if (hasGemini) {
-    try {
-      return await queryGemini(
-        systemPrompt,
-        userPrompt,
-        temperature
-      );
-    } catch (error) {
-      console.error("Gemini request failed:", {
-        status: error.status,
-        message: error.message,
-      });
-
-      const combinedError = new Error(
-        `AI providers failed. Groq: ${
-          groqError?.message || "not attempted"
-        }. Gemini: ${error.message}`
-      );
-
-      combinedError.status = 502;
-      throw combinedError;
-    }
-  }
-
-  const error = new Error(
-    `Groq AI request failed: ${groqError?.message || "Unknown error"}`
-  );
-
-  error.status = groqError?.status || 502;
-  throw error;
 }
 
 /**
@@ -195,50 +129,73 @@ export async function generatePlan(tool, prompt, workspaceContext = "") {
     "Risk analyzer": "Analyze only the supplied project description and verified workspace data. Separate verified facts from inferred risks. Prioritize risk items and include likelihood, impact, severity, mitigation, contingency, and suggested owner in each risk description.",
     "Weekly report": "Write a weekly delivery report from the verified workspace data only: completed work, work in progress, blockers, risks, milestones, next-week priorities, and follow-up actions. If a category has no supporting data, say that it was not recorded. Never claim work was completed without a completed task in the data."
   };
-  const systemPrompt = `
-You are TaskFlow AI, an expert project manager and agile lead.
-Return only valid JSON. Do not include markdown fences or text outside JSON.
-Do not invent verified progress, user names, dates, team capacity, or accomplishments. Clearly label inference.
+ const systemPrompt = `
+You are TaskFlow AI, an expert project manager.
+
+Return exactly one valid JSON object.
+Do not include Markdown or explanations outside JSON.
+
+Rules:
+- Never invent verified progress or accomplishments.
+- Distinguish verified facts from inferred information.
+- Generate 3 to 5 actionable phases.
+- Each phase must contain exactly 4 strings.
+- Each task description must be under 20 words.
+- Priority must be Low, Medium, High, or Critical.
+- Include no more than 3 risks.
+- Include no more than 5 roles.
+- Do not add extra JSON properties.
+- Return complete and valid JSON.
 `;
 
   const userPrompt = `
 Tool: ${tool || "Project planner"}
-Goal: ${prompt}
-Verified workspace data (treat this as the only source of progress facts):
+
+Goal:
+${prompt}
+
+Verified workspace data:
 ${workspaceContext || "No workspace data was supplied."}
 
-Tool-specific instructions:
+Tool instructions:
 ${toolGuidance[tool] || toolGuidance["Project planner"]}
 
-Return a JSON object with this structure:
+Return JSON using exactly this structure:
+
 {
-  "tool": "${tool}",
-  "name": "Concise plan title",
-  "description": "Summary in 2-3 sentences",
+  "tool": "${tool || "Project planner"}",
+  "name": "Project plan title",
+  "description": "Brief plan summary",
   "phases": [
     [
-      "Task or work item title",
-      "Effort or time estimate",
-      "Description with dependencies and completion criteria where relevant",
+      "Task title",
+      "Estimated effort",
+      "Task description",
       "Medium"
     ]
   ],
   "objectives": ["Objective"],
   "deliverables": ["Deliverable"],
   "milestones": ["Milestone"],
-  "risks": ["Risk with likelihood, impact, mitigation, contingency, owner, and whether it is inferred or verified"],
+  "risks": ["Risk, likelihood, impact and mitigation"],
   "roles": ["Recommended role"],
-  "capacityNote": "Known capacity or explicitly state that it was not provided"
+  "capacityNote": "Team capacity information"
 }
 
 Requirements:
-- Generate 3 to 7 actionable, sequential phases.
-- Each phase must contain exactly 4 elements.
+- Generate 3 to 5 phases.
+- Every phase must contain exactly 4 strings.
+- Phase format: title, effort, description, priority.
 - Priority must be Low, Medium, High, or Critical.
-- risks and roles must be arrays of strings.
+- Keep descriptions under 20 words.
+- Include no more than 3 risks.
+- Include no more than 5 roles.
+- Use arrays of strings for objectives, deliverables, milestones, risks and roles.
+- Do not invent workspace progress.
+- Return one complete JSON object.
 `;
 
-  const raw = await queryLLM(systemPrompt, userPrompt, 0.2);
+  const raw = await queryLLM(systemPrompt, userPrompt, 0.2,"json");
 
   try {
     const parsed = extractJSON(raw);

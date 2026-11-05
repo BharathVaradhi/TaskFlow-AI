@@ -46,8 +46,7 @@ app.get("/api/health", (_req, res) => {
   const dbStates = ["disconnected", "connected", "connecting", "disconnecting"];
   const dbState = dbStates[mongoose.connection.readyState] || "unknown";
   const hasAI = Boolean(
-    (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY.trim()) ||
-    (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim())
+    (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY.trim()) 
   );
 
   res.json({
