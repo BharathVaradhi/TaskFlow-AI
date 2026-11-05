@@ -58,15 +58,19 @@ async function queryGroq(systemPrompt, userPrompt, temperature) {
     process.env.GROQ_MODEL ||  "openai/gpt-oss-120b";
     console.log("ACTIVE GROQ MODEL:", model);
 
-  const completion = await groq.chat.completions.create({
-    model,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ],
-    temperature,
-    max_tokens: 1500,
-  });
+  
+const completion = await groq.chat.completions.create({
+  model,
+  messages: [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userPrompt },
+  ],
+  temperature,
+  max_tokens: 1500,
+  response_format: {
+    type: "json_object",
+  },
+});
 
   const content = completion.choices?.[0]?.message?.content;
 
