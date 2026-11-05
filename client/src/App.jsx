@@ -880,13 +880,21 @@ function AIWorkspace({ users, currentUser }) {
         initialSelected[idx] = true;
       });
       setSelectedPhases(initialSelected);
-    } catch (err) {
-      console.error(err);
-      setErrorMessage(
-        err.response?.data?.message ||
-        "AI model generation failed. Ensure GROQ_API_KEY or GEMINI_API_KEY is configured in server/.env."
-      );
-    } finally {
+     } catch (err) {
+  console.error("AI generation error:", {
+    message: err.message,
+    status: err.response?.status,
+    response: err.response?.data
+  });
+
+  setErrorMessage(
+    err.response?.data?.message ||
+    err.response?.data?.error ||
+    (err.response
+      ? `AI generation failed (HTTP ${err.response.status}). Check backend logs.`
+      : "Cannot connect to the backend. Check whether the server is running.")
+  );
+} finally {
       setLoading(false);
     }
   };
