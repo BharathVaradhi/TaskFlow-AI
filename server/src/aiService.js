@@ -36,12 +36,24 @@ function extractJSON(text) {
 /**
  * Call Groq.
  */
+
 async function queryGroq(systemPrompt, userPrompt, temperature) {
-  const groq = new Groq({
-    apiKey: process.env.GROQ_API_KEY.trim(),
+  const apiKey = process.env.GROQ_API_KEY?.trim();
+
+  console.log("Groq configuration:", {
+    keyExists: Boolean(apiKey),
+    keyLength: apiKey?.length,
+    startsWithGsk: apiKey?.startsWith("gsk_"),
   });
 
-  // Override the model through server/.env if needed.
+  if (!apiKey) {
+    throw new Error("GROQ_API_KEY is missing");
+  }
+
+  const groq = new Groq({
+    apiKey,
+  });
+
   const model =
     process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
@@ -63,6 +75,7 @@ async function queryGroq(systemPrompt, userPrompt, temperature) {
 
   return content.trim();
 }
+
 
 /**
  * Call Gemini.
